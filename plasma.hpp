@@ -1,6 +1,6 @@
 #include "pico/stdlib.h"
 
-const uint PLASMA_CLOCK = 22;
+[[maybe_unused]] const uint PLASMA_CLOCK = 22;
 const uint PLASMA_DATA = 23;
 extern uint8_t led_front_buffer[32 * 4 * 4];
 
