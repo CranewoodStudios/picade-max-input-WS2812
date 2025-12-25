@@ -37,6 +37,7 @@ target_link_libraries(${NAME} PUBLIC
 )
 
 pico_generate_pio_header(${NAME} ${CMAKE_CURRENT_LIST_DIR}/picade.pio)
+pico_generate_pio_header(${NAME} ${CMAKE_CURRENT_LIST_DIR}/ws2812.pio)
 
 # create map/bin/hex file etc.
 pico_add_extra_outputs(${NAME})
