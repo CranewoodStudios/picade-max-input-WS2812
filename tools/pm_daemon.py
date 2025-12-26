@@ -12,7 +12,8 @@ import signal
 import select
 
 # ---------- CONFIG ----------
-NUM_LEDS = int(os.environ.get("PM_NUM_LEDS", "128"))
+FW_LED_CAP = 32 * 4  # firmware buffers 32 buttons * 4 LEDs each
+NUM_LEDS = min(int(os.environ.get("PM_NUM_LEDS", "128")), FW_LED_CAP)
 ORDER = list(range(NUM_LEDS))      # change if your physical order differs
 BRIGHT_LIMIT = 31                  # firmware caps brightness at 31
 FPS = 60
