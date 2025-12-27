@@ -28,6 +28,7 @@
 #include <string>
 #include <string_view>
 #include <ctype.h>  // isupper / islower
+#include <string.h>
 
 #include "bsp/board_api.h"
 #include "tusb.h"
@@ -58,7 +59,7 @@ void usb_serial_init(void);
 }
 
 //--------------------------------------------------------------------+
-// MACRO CONSTANT TYPEDEF PROTYPES
+// MACRO CONSTANT TYPEDEF PROTOTES
 //--------------------------------------------------------------------+
 
 // Interface index depends on the order in configuration descriptor
@@ -120,6 +121,50 @@ size_t cdc_get_bytes(const uint8_t *buffer, const size_t len, const uint timeout
     return len - bytes_remaining;
 }
 
+// New multiverse bridge parsing
+static const char MULTIVERSE_HEADER[] = "multiverse:data";
+static const size_t MULTIVERSE_HEADER_LEN = sizeof(MULTIVERSE_HEADER) - 1;
+
+// Apply frame: payload = N * (B,G,R,brightness(0..255))
+static void apply_multiverse_frame(const uint8_t *payload, size_t len) {
+    if (len == 0 || (len % 4) != 0) return;
+    size_t n = len / 4;
+    size_t max_pixels = sizeof(led_front_buffer) / 4; // number of pixels supported by firmware
+    if (n > max_pixels) n = max_pixels;
+
+    for (size_t i = 0; i < n; ++i) {
+        size_t idx = i * 4;
+        uint8_t b = payload[idx + 0];
+        uint8_t g = payload[idx + 1];
+        uint8_t r = payload[idx + 2];
+        uint8_t br = payload[idx + 3];
+
+        // Map brightness 0..255 to firmware's 0..MAX_BRIGHTNESS (defined in plasma.cpp)
+        // MAX_BRIGHTNESS is 31 in plasma.cpp. We map proportionally.
+        const uint8_t MAX_BRIGHT = 31;
+        uint8_t mapped_br = (uint8_t)((((uint32_t)br) * MAX_BRIGHT) / 255);
+
+        // Store as B,G,R,brightness (firmware expects this layout)
+        size_t base = i * 4;
+        led_front_buffer[base + 0] = b;
+        led_front_buffer[base + 1] = g;
+        led_front_buffer[base + 2] = r;
+        led_front_buffer[base + 3] = mapped_br;
+    }
+
+    // If host sent fewer pixels than buffer, zero remaining pixels
+    size_t total_pixels = sizeof(led_front_buffer) / 4;
+    for (size_t i = n; i < total_pixels; ++i) {
+        size_t base = i * 4;
+        led_front_buffer[base + 0] = 0;
+        led_front_buffer[base + 1] = 0;
+        led_front_buffer[base + 2] = 0;
+        led_front_buffer[base + 3] = 0;
+    }
+
+    plasma_flip();
+}
+
 /*------------- MAIN -------------*/
 int main(void)
 {
@@ -144,47 +189,114 @@ int main(void)
 
   led.set_rgb(0, 255, 0);
 
+  // Buffer for incoming CDC bytes
+  static uint8_t usb_buf[2048];
+  static size_t usb_buf_len = 0;
+
   while (1)
   {
     tud_task();
     hid_task();
-    //cdc_task();
 
+    // Read available CDC bytes into usb_buf
     if (tud_cdc_connected()) {
-      if (tud_cdc_available()) {
-        if(!cdc_wait_for("multiverse:")) {
-            continue; // Couldn't get 16 bytes of command
-        }
+      int r = cdc_task(usb_buf + usb_buf_len, sizeof(usb_buf) - usb_buf_len);
+      if (r > 0) {
+          usb_buf_len += (size_t)r;
+          // Parse for MULTIVERSE_HEADER ... payload ... [MULTIVERSE_HEADER ...]
+          while (true) {
+              // find header
+              size_t i = SIZE_MAX;
+              if (usb_buf_len >= MULTIVERSE_HEADER_LEN) {
+                  for (size_t k = 0; k + MULTIVERSE_HEADER_LEN <= usb_buf_len; ++k) {
+                      if (memcmp(usb_buf + k, MULTIVERSE_HEADER, MULTIVERSE_HEADER_LEN) == 0) { i = k; break; }
+                  }
+              }
 
-        if(cdc_get_bytes(command_buffer, COMMAND_LEN) != COMMAND_LEN) {
-            //display::info("cto");
-            continue;
-        }
+              if (i == SIZE_MAX) {
+                  // header not found
+                  if (usb_buf_len > MULTIVERSE_HEADER_LEN) {
+                      // keep a short tail in case header split
+                      size_t tail = MULTIVERSE_HEADER_LEN;
+                      memmove(usb_buf, usb_buf + usb_buf_len - tail, tail);
+                      usb_buf_len = tail;
+                  }
+                  break;
+              }
 
-        if(command == "data") {
-            if (cdc_get_bytes(led_front_buffer, sizeof(led_front_buffer)) == sizeof(led_front_buffer)) {
-              plasma_flip();
-            }
-            continue;
-        }
+              // move header to start if not at 0
+              if (i > 0) {
+                  memmove(usb_buf, usb_buf + i, usb_buf_len - i);
+                  usb_buf_len -= i;
+              }
 
-        if(command == "_rst") {
-            sleep_ms(500);
-            save_and_disable_interrupts();
-            rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
-            watchdog_reboot(0, 0, 0);
-            continue;
-        }
+              // find next header after this one
+              size_t j = SIZE_MAX;
+              if (usb_buf_len >= MULTIVERSE_HEADER_LEN * 2) {
+                  for (size_t k = MULTIVERSE_HEADER_LEN; k + MULTIVERSE_HEADER_LEN <= usb_buf_len; ++k) {
+                      if (memcmp(usb_buf + k, MULTIVERSE_HEADER, MULTIVERSE_HEADER_LEN) == 0) { j = k; break; }
+                  }
+              }
 
-        if(command == "_usb") {
-            sleep_ms(500);
-            save_and_disable_interrupts();
-            rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
-            reset_usb_boot(0, 0);
-            continue;
-        }
+              if (j == SIZE_MAX) {
+                  // no next header — take remainder as payload candidate
+                  size_t payload_len = (usb_buf_len > MULTIVERSE_HEADER_LEN) ? (usb_buf_len - MULTIVERSE_HEADER_LEN) : 0;
+                  if (payload_len > 0 && (payload_len % 4) == 0) {
+                      apply_multiverse_frame(usb_buf + MULTIVERSE_HEADER_LEN, payload_len);
+                      // consume buffer
+                      usb_buf_len = 0;
+                  } else {
+                      // keep data in buffer until more arrives (or trim to header tail)
+                      if (usb_buf_len > MULTIVERSE_HEADER_LEN * 2) {
+                          // prevent uncontrolled growth
+                          size_t tail = MULTIVERSE_HEADER_LEN * 2;
+                          memmove(usb_buf, usb_buf + usb_buf_len - tail, tail);
+                          usb_buf_len = tail;
+                      }
+                  }
+                  break;
+              } else {
+                  // payload between header and next header
+                  size_t payload_len = j - MULTIVERSE_HEADER_LEN;
+                  if (payload_len > 0 && (payload_len % 4) == 0) {
+                      apply_multiverse_frame(usb_buf + MULTIVERSE_HEADER_LEN, payload_len);
+                  }
+                  // move remaining bytes (from next header) to front
+                  size_t remain = usb_buf_len - j;
+                  memmove(usb_buf, usb_buf + j, remain);
+                  usb_buf_len = remain;
+                  // continue parsing next packet(s)
+              }
+          }
+      }
+
+      // Also keep support for older command style: look for "multiverse:" then 4-byte command
+      // (This keeps compatibility with existing hosts that send the fixed-size buffer.)
+      if (usb_buf_len == 0 && tud_cdc_available()) {
+          // quick non-blocking attempt to parse legacy commands
+          if (cdc_wait_for("multiverse:", 10)) {
+              if (cdc_get_bytes(command_buffer, COMMAND_LEN) == COMMAND_LEN) {
+                  if (command == "data") {
+                      // read full led_front_buffer if available
+                      if (cdc_get_bytes(led_front_buffer, sizeof(led_front_buffer)) == sizeof(led_front_buffer)) {
+                          plasma_flip();
+                      }
+                  } else if (command == "_rst") {
+                      sleep_ms(500);
+                      save_and_disable_interrupts();
+                      rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
+                      watchdog_reboot(0, 0, 0);
+                  } else if (command == "_usb") {
+                      sleep_ms(500);
+                      save_and_disable_interrupts();
+                      rosc_hw->ctrl = ROSC_CTRL_ENABLE_VALUE_ENABLE << ROSC_CTRL_ENABLE_LSB;
+                      reset_usb_boot(0, 0);
+                  }
+              }
+          }
       }
     }
+
   }
 
   return 0;
@@ -258,7 +370,7 @@ void hid_task(void)
       uint8_t keycode[6] = {
         (uint8_t)((in.util & (UTIL_P1_HOTKEY | UTIL_P2_HOTKEY)) ? HID_KEY_ESCAPE : 0u),
       };
-  
+    
       tud_hid_n_keyboard_report(ITF_KEYBOARD, 0, 0, keycode);
 
       last_util = in.util;
