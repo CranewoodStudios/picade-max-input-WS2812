@@ -165,6 +165,86 @@ static void apply_multiverse_frame(const uint8_t *payload, size_t len) {
     plasma_flip();
 }
 
+// Startup animation similar to tools/code.py
+static void startup_animation(size_t first_n = 7, uint32_t dwell_ms = 500, int fade_steps = 60, uint32_t fade_ms = 20, uint8_t white = 255) {
+    size_t max_pixels = sizeof(led_front_buffer) / 4;
+    if (first_n == 0) return;
+    if (first_n > max_pixels) first_n = max_pixels;
+
+    // all off
+    for (size_t i = 0; i < first_n; ++i) {
+        size_t base = i * 4;
+        led_front_buffer[base + 0] = 0;
+        led_front_buffer[base + 1] = 0;
+        led_front_buffer[base + 2] = 0;
+        led_front_buffer[base + 3] = 0;
+    }
+    plasma_flip();
+
+    const uint8_t MAX_BRIGHT = 31; // matches plasma.cpp
+
+    // per-LED: red -> green -> blue -> stay white
+    for (size_t i = 0; i < first_n; ++i) {
+        // red
+        size_t base = i * 4;
+        led_front_buffer[base + 0] = 0;         // b
+        led_front_buffer[base + 1] = 0;         // g
+        led_front_buffer[base + 2] = white;     // r
+        led_front_buffer[base + 3] = MAX_BRIGHT;
+        plasma_flip();
+        sleep_ms(dwell_ms);
+
+        // green
+        led_front_buffer[base + 0] = 0;
+        led_front_buffer[base + 1] = white;
+        led_front_buffer[base + 2] = 0;
+        led_front_buffer[base + 3] = MAX_BRIGHT;
+        plasma_flip();
+        sleep_ms(dwell_ms);
+
+        // blue
+        led_front_buffer[base + 0] = white;
+        led_front_buffer[base + 1] = 0;
+        led_front_buffer[base + 2] = 0;
+        led_front_buffer[base + 3] = MAX_BRIGHT;
+        plasma_flip();
+        sleep_ms(dwell_ms);
+
+        // white
+        led_front_buffer[base + 0] = white;
+        led_front_buffer[base + 1] = white;
+        led_front_buffer[base + 2] = white;
+        led_front_buffer[base + 3] = MAX_BRIGHT;
+        plasma_flip();
+        sleep_ms(dwell_ms);
+    }
+
+    // fade all to off by decreasing brightness
+    for (int step = fade_steps; step >= 0; --step) {
+        uint8_t mapped_b = (uint8_t)(((uint32_t)step * MAX_BRIGHT) / fade_steps);
+        for (size_t i = 0; i < first_n; ++i) {
+            size_t base = i * 4;
+            // keep color white, change brightness
+            led_front_buffer[base + 0] = white;
+            led_front_buffer[base + 1] = white;
+            led_front_buffer[base + 2] = white;
+            led_front_buffer[base + 3] = mapped_b;
+        }
+        plasma_flip();
+        sleep_ms(fade_ms);
+    }
+
+    // ensure all off
+    for (size_t i = 0; i < first_n; ++i) {
+        size_t base = i * 4;
+        led_front_buffer[base + 0] = 0;
+        led_front_buffer[base + 1] = 0;
+        led_front_buffer[base + 2] = 0;
+        led_front_buffer[base + 3] = 0;
+    }
+    plasma_flip();
+}
+
 /*------------- MAIN -------------*/
 int main(void)
 {
@@ -186,6 +266,9 @@ int main(void)
 
   picade_init();
   plasma_init();
+
+  // run startup animation for first 7 LEDs (matches tools/code.py)
+  startup_animation(7, 500, 60, 20, 255);
 
   led.set_rgb(0, 255, 0);
 
