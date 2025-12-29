@@ -6,7 +6,7 @@
 // TODO I count 30 inputs on the board- 12 per player + 6 util so we're probably OK with 32 buttons * 4 LEDs * 4 bytes?
 uint8_t led_front_buffer[32 * 4 * 4] = {0};
 
-static constexpr uint MAX_BRIGHTNESS = 31;
+static constexpr uint MAX_BRIGHTNESS = 255;
 static constexpr size_t LED_COUNT = sizeof(led_front_buffer) / 4;
 static PIO plasma_pio = pio0;
 static uint plasma_sm = 0;
