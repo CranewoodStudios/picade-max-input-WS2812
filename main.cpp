@@ -139,10 +139,8 @@ static void apply_multiverse_frame(const uint8_t *payload, size_t len) {
         uint8_t r = payload[idx + 2];
         uint8_t br = payload[idx + 3];
 
-        // Map brightness 0..255 to firmware's 0..MAX_BRIGHTNESS (defined in plasma.cpp)
-        // MAX_BRIGHTNESS is 31 in plasma.cpp. We map proportionally.
-        const uint8_t MAX_BRIGHT = 31;
-        uint8_t mapped_br = (uint8_t)((((uint32_t)br) * MAX_BRIGHT) / 255);
+        // Brightness arrives as 0..255; store directly.
+        uint8_t mapped_br = br;
 
         // Store as B,G,R,brightness (firmware expects this layout)
         size_t base = i * 4;
@@ -181,7 +179,7 @@ static void startup_animation(size_t first_n = 7, uint32_t dwell_ms = 500, int f
     }
     plasma_flip();
 
-    const uint8_t MAX_BRIGHT = 31; // matches plasma.cpp
+    const uint8_t MAX_BRIGHT = 255; // matches plasma.cpp
 
     // per-LED: red -> green -> blue -> stay white
     for (size_t i = 0; i < first_n; ++i) {
