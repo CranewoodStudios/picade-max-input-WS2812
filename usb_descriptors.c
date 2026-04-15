@@ -29,7 +29,7 @@
 
 #ifndef USB_DEVICE_VERSION
 // 1.0, Format 0xXXYZ (YY = major, Y = minor, Z = sub)
-#define USB_DEVICE_VERSION (0x0101)
+#define USB_DEVICE_VERSION (0x0103)
 #endif
 
 enum
@@ -167,8 +167,8 @@ char const* string_desc_arr [] =
   "Pimoroni",                     // 1: Manufacturer
   "Picade Max Test A",                   // 2: Product
   usb_serial,                     // 3: Serials, should use chip ID
-  "GamePad 1",
-  "GamePad 2",
+  "PICADE_P1_UNIQUE",
+  "PICADE_P1_UNIQUE",
   "Keyboard",
   "Plasma",
 };
