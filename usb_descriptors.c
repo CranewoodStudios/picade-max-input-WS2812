@@ -95,12 +95,12 @@ void usb_serial_init(void) {
 
 uint8_t const desc_hid_report_gamepad1[] =
 {
-  PICADE_HID_GAMEPAD()
+  PICADE_HID_GAMEPAD_15BTN()
 };
 
 uint8_t const desc_hid_report_gamepad2[] =
 {
-  PICADE_HID_GAMEPAD()
+  PICADE_HID_GAMEPAD_16BTN()
 };
 
 uint8_t const desc_hid_report_keyboard[] =
