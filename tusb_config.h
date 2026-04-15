@@ -22,6 +22,7 @@
  * THE SOFTWARE.
  *
  */
+
 #ifndef _TUSB_CONFIG_H_
 #define _TUSB_CONFIG_H_
 
@@ -49,7 +50,7 @@
 
 // defined by compiler flags for flexibility
 #ifndef CFG_TUSB_MCU
-#error CFG_TUSB_MCU must be defined
+  #error CFG_TUSB_MCU must be defined
 #endif
 
 #ifndef CFG_TUSB_OS
@@ -86,25 +87,31 @@
 //--------------------------------------------------------------------
 
 #ifndef CFG_TUD_ENDPOINT0_SIZE
-#define CFG_TUD_ENDPOINT0_SIZE    64
+#define CFG_TUD_ENDPOINT0_SIZE   64
 #endif
 
 //------------- CLASS -------------//
-#define CFG_TUD_HID               3
-#define CFG_TUD_CDC               1
-#define CFG_TUD_MSC               0
-#define CFG_TUD_MIDI              0
-#define CFG_TUD_VENDOR            0
+#define CFG_TUD_HID             3
+#define CFG_TUD_CDC             1
+#define CFG_TUD_MSC             0
+#define CFG_TUD_MIDI            0
+
+// CHANGED: Enable vendor class (was 0) to handle MS OS 2.0 vendor requests.
+// This enables the tud_vendor_control_xfer_cb() callback which we use to
+// serve the MS OS 2.0 descriptor set to Windows.
+// Note: We don't add a vendor interface to the configuration descriptor;
+// we only need the control transfer callback for the vendor request.
+#define CFG_TUD_VENDOR          1
 
 // HID buffer size Should be sufficient to hold ID (if any) + Data
-#define CFG_TUD_HID_EP_BUFSIZE    16
+#define CFG_TUD_HID_EP_BUFSIZE  16
 
 // CDC FIFO size of TX and RX
-#define CFG_TUD_CDC_RX_BUFSIZE    512
-#define CFG_TUD_CDC_TX_BUFSIZE    512
+#define CFG_TUD_CDC_RX_BUFSIZE  512
+#define CFG_TUD_CDC_TX_BUFSIZE  512
 
 // CDC Endpoint transfer buffer size, more is faster
-#define CFG_TUD_CDC_EP_BUFSIZE    512
+#define CFG_TUD_CDC_EP_BUFSIZE  512
 
 #ifdef __cplusplus
  }
