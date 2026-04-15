@@ -29,7 +29,7 @@
 
 #ifndef USB_DEVICE_VERSION
 // 1.0, Format 0xXXYZ (YY = major, Y = minor, Z = sub)
-#define USB_DEVICE_VERSION (0x0100)
+#define USB_DEVICE_VERSION (0x0101)
 #endif
 
 enum
@@ -165,7 +165,7 @@ char const* string_desc_arr [] =
 {
   (const char[]) { 0x09, 0x04 },  // 0: is supported language is English (0x0409)
   "Pimoroni",                     // 1: Manufacturer
-  "Picade Max",                   // 2: Product
+  "Picade Max Test A",                   // 2: Product
   usb_serial,                     // 3: Serials, should use chip ID
   "GamePad 1",
   "GamePad 2",
